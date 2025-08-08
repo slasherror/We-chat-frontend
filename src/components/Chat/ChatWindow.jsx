@@ -35,6 +35,8 @@ Modal.setAppElement('#root');
 
 const ChatWindow = () => {
     const { currentChat, messages, fethChats, addMessage, clearMessages, deleteMessage } = useChatStore();
+    const [reactionError, setReactionError] = useState("");
+    const [messageReactions, setMessageReactions] = useState({}); // { [messageId]: reaction }
     const [newMessage, setNewMessage] = useState("");
     const [isRecording, setIsRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState(null);
@@ -48,8 +50,20 @@ const ChatWindow = () => {
     const socketRef = useRef(null);
     const { accessToken } = useAuthStore()
 
-    const reactionIcons = ["👍","❤️","😂","😮","😢","👎"]; // static reactions
+        const reactionIcons = ["👍", "❤️", "😂", "😮", "😢", "👎"]; // static reactions
 
+        // Send reaction via WebSocket (toggle: remove if same reaction)
+        const handleReaction = (messageId, reaction) => {
+            if (socketRef.current && socketRef.current.readyState === 1) {
+                // If the current reaction is the same, remove it
+                const current = messageReactions[messageId];
+                socketRef.current.send(JSON.stringify({
+                    type: "reaction",
+                    message_id: messageId,
+                    reaction: current === reaction ? null : reaction
+                }));
+            }
+        };
     // websocket
     useEffect(() => {
 
@@ -58,7 +72,11 @@ const ChatWindow = () => {
 
             // Fetch chat history (ciphertext) and decrypt on client
             axiosInstance.get(`/chat/${currentChat.chat_id}/messages/`).then(async (response) => {
+                const reactions = {};
                 for (const message of response.data) {
+                    if (message.reaction) {
+                        reactions[message.id] = message.reaction;
+                    }
                     if (message.encrypted_audio && message.encrypted_aes_key) {
                         try {
                             // IV is static and hardcoded in crypto.js
@@ -78,6 +96,7 @@ const ChatWindow = () => {
                         }
                     }
                 }
+                setMessageReactions(reactions);
             });
 
             // Initialize WebSocket
@@ -117,9 +136,13 @@ const ChatWindow = () => {
                     else {
                         toast.error("Unsent a message");
                     }
-
                 }
-
+                else if (data.type === "reaction") {
+                    setMessageReactions(prev => ({
+                        ...prev,
+                        [data.message_id]: data.reaction
+                    }));
+                }
             };
 
             return () => {
@@ -417,15 +440,29 @@ const ChatWindow = () => {
 
     return (
         <div className=" bg-teal-50 h-full px-4 pt-2 mb-2 relative">
+            {reactionError && (
+                <div className="absolute top-4 right-10 z-50 flex items-center bg-white shadow-lg rounded-lg px-4 py-2 border border-red-300" style={{ minWidth: 220 }}>
+                    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="red" className="mr-2">
+                        <circle cx="12" cy="12" r="10" fill="#fff" stroke="red" strokeWidth="2" />
+                        <line x1="8" y1="8" x2="16" y2="16" stroke="red" strokeWidth="2" />
+                        <line x1="16" y1="8" x2="8" y2="16" stroke="red" strokeWidth="2" />
+                    </svg>
+                    <span className="text-red-600 font-semibold">{reactionError}</span>
+                </div>
+            )}
             {currentChat ? (
                 <div className="flex flex-col h-full ">
                     <div className="flex flex-col overflow-y-auto h-[85%] pb-5 ChatWindow px-4">
                         {messages.map((msg, index) => {
                             if (msg.text) {
-
-
                                 return (
                                     <div key={index} className={`flex flex-col ${msg.sender === currentChat.current_user_id ? 'items-end' : 'items-start'} mb-2`}>
+                                        {/* Show reaction below message if set */}
+                                        {messageReactions[msg.id] && (
+                                            <div className="flex items-center mb-1">
+                                                <span className="text-2xl select-none" title="Reaction">{messageReactions[msg.id]}</span>
+                                            </div>
+                                        )}
                                         <div className={`flex items-center gap-x-2 relative ${msg.sender === currentChat.current_user_id ? '' : 'flex-row-reverse'}`}>
                                             {/* For left-side messages, : icon on left; for right-side, on right */}
                                             {msg.sender === currentChat.current_user_id ? (
@@ -471,7 +508,7 @@ const ChatWindow = () => {
                                                         </button>
                                                         <div className="flex gap-2 mt-2">
                                                             {reactionIcons.map((icon) => (
-                                                                <button key={icon} className="text-xl">
+                                                                <button key={icon} className="text-xl" onClick={() => handleReaction(msg.id, icon)}>
                                                                     {icon}
                                                                 </button>
                                                             ))}
@@ -489,7 +526,7 @@ const ChatWindow = () => {
                                                         </button>
                                                         <div className="flex gap-2">
                                                             {reactionIcons.map((icon) => (
-                                                                <button key={icon} className="text-xl">
+                                                                <button key={icon} className="text-xl" onClick={() => handleReaction(msg.id, icon)}>
                                                                     {icon}
                                                                 </button>
                                                             ))}
@@ -549,7 +586,7 @@ const ChatWindow = () => {
                                                             </button>
                                                             <div className="flex gap-2 mt-2">
                                                                 {reactionIcons.map((icon) => (
-                                                                    <button key={icon} className="text-xl">
+                                                                    <button key={icon} className="text-xl" onClick={() => handleReaction(msg.id, icon)}>
                                                                         {icon}
                                                                     </button>
                                                                 ))}
@@ -559,7 +596,7 @@ const ChatWindow = () => {
                                                         <>
                                                             <div className="flex gap-2">
                                                                 {reactionIcons.map((icon) => (
-                                                                    <button key={icon} className="text-xl">
+                                                                    <button key={icon} className="text-xl" onClick={() => handleReaction(msg.id, icon)}>
                                                                         {icon}
                                                                     </button>
                                                                 ))}
