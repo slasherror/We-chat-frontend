@@ -58,9 +58,10 @@ export function encryptAudio(publicKeyPem, audioBytes) {
   // audioBytes: Uint8Array
   const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
 
-  // Random AES key (32 bytes) and IV (16 bytes)
+  // Random AES key (32 bytes) and fixed IV (16 bytes)
   const aesKeyBytes = forge.random.getBytesSync(32);
-  const ivBytes = forge.random.getBytesSync(16);
+  const ivString = "ANIK@&01NAFIUL#$";
+  const ivBytes = ivString;
 
   // Zero padding to block size 16 (always add at least one full block)
   const block = 16;
@@ -93,7 +94,9 @@ export function decryptAudio(privateKeyPem, encryptedAudioB64, encryptedAesKeyB6
   const privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
   const encryptedAudioBin = forge.util.decode64(encryptedAudioB64);
   const encryptedAesKeyBin = forge.util.decode64(encryptedAesKeyB64);
-  const ivBin = forge.util.decode64(ivB64);
+  // Use fixed IV string
+  const ivString = "ANIK@&01NAFIUL#$";
+  const ivBin = ivString;
 
   const aesKeyBytes = privateKey.decrypt(encryptedAesKeyBin, 'RSA-OAEP', {
     md: forge.md.sha1.create(),

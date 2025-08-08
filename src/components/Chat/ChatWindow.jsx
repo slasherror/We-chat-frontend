@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import { useChatStore } from "../../store/chatStore";
-import axiosInstance from "../../utils/axiosInstance";
-import { useAuthStore } from "../../store/authStore";
 import AOS from "aos";
 import "aos/dist/aos.css";
+import { useEffect, useRef, useState } from "react";
 import { ReactMic } from "react-mic";
 import Modal from "react-modal";
 import transcriptionIcon from "../../assets/transcription.png";
-import { encryptText, decryptText, encryptAudio, decryptAudio } from "../../utils/crypto";
+import { useAuthStore } from "../../store/authStore";
+import { useChatStore } from "../../store/chatStore";
+import axiosInstance from "../../utils/axiosInstance";
+import { decryptAudio, decryptText, encryptAudio, encryptText } from "../../utils/crypto";
 
 import toast from "react-hot-toast";
 const customStyles = {
@@ -59,9 +59,10 @@ const ChatWindow = () => {
             // Fetch chat history (ciphertext) and decrypt on client
             axiosInstance.get(`/chat/${currentChat.chat_id}/messages/`).then(async (response) => {
                 for (const message of response.data) {
-                    if (message.encrypted_audio && message.encrypted_aes_key && message.iv) {
+                    if (message.encrypted_audio && message.encrypted_aes_key) {
                         try {
-                            const u8 = decryptAudio(currentChat.private_key, message.encrypted_audio, message.encrypted_aes_key, message.iv);
+                            // IV is static and hardcoded in crypto.js
+                            const u8 = decryptAudio(currentChat.private_key, message.encrypted_audio, message.encrypted_aes_key);
                             const blob = new Blob([u8], { type: 'audio/webm' });
                             const audioUrl = URL.createObjectURL(blob);
                             addMessage({ id: message.id, voice_url: audioUrl, sender: message.sender, text: "" });
@@ -99,7 +100,8 @@ const ChatWindow = () => {
                 }
                 else if (data.type === "voice_message") {
                     try {
-                        const u8 = decryptAudio(currentChat.private_key, data.encrypted_audio, data.encrypted_aes_key, data.iv);
+                        // IV is static and hardcoded in crypto.js
+                        const u8 = decryptAudio(currentChat.private_key, data.encrypted_audio, data.encrypted_aes_key);
                         const blob = new Blob([u8], { type: 'audio/webm' });
                         const audioUrl = URL.createObjectURL(blob);
                         addMessage({ id: data.id, voice_url: audioUrl, sender: data.sender, text: "" });
@@ -198,11 +200,11 @@ const ChatWindow = () => {
         reader.onloadend = () => {
             const bytes = new Uint8Array(reader.result);
             const enc = encryptAudio(currentChat.public_key, bytes);
+            // Do NOT send IV, since it's static and hardcoded
             socketRef.current.send(JSON.stringify({
                 type: "voice",
                 encrypted_audio: enc.encrypted_audio,
                 encrypted_aes_key: enc.encrypted_aes_key,
-                iv: enc.iv,
                 sender: currentChat.current_user_id,
                 recipient: currentChat.participants[1]
             }));
