@@ -7,6 +7,7 @@ import "aos/dist/aos.css";
 import { ReactMic } from "react-mic";
 import Modal from "react-modal";
 import transcriptionIcon from "../../assets/transcription.png";
+import { encryptText, decryptText, encryptAudio, decryptAudio } from "../../utils/crypto";
 
 import toast from "react-hot-toast";
 const customStyles = {
@@ -47,72 +48,66 @@ const ChatWindow = () => {
     const socketRef = useRef(null);
     const { accessToken } = useAuthStore()
 
+    const reactionIcons = ["👍","❤️","😂","😮","😢","👎"]; // static reactions
+
     // websocket
     useEffect(() => {
 
         if (currentChat) {
             clearMessages();
 
-            // Fetch chat history
-            axiosInstance.get(`/chat/${currentChat.chat_id}/messages/`).then((response) => {
-                response.data.forEach((message) => {
-
-                    if (message.voice_url) {
-                        const audioBlob = new Blob([new Uint8Array(atob(message.voice_url).split("").map(char => char.charCodeAt(0)))], { type: 'audio/mp3' });
-
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        const newMessage = {
-                            id: message.id,
-                            voice_url: audioUrl,
-                            sender: message.sender,
-                            text: "",
+            // Fetch chat history (ciphertext) and decrypt on client
+            axiosInstance.get(`/chat/${currentChat.chat_id}/messages/`).then(async (response) => {
+                for (const message of response.data) {
+                    if (message.encrypted_audio && message.encrypted_aes_key && message.iv) {
+                        try {
+                            const u8 = decryptAudio(currentChat.private_key, message.encrypted_audio, message.encrypted_aes_key, message.iv);
+                            const blob = new Blob([u8], { type: 'audio/webm' });
+                            const audioUrl = URL.createObjectURL(blob);
+                            addMessage({ id: message.id, voice_url: audioUrl, sender: message.sender, text: "" });
+                        } catch (e) {
+                            console.error('Voice decrypt error', e);
                         }
-                        addMessage(newMessage);
+                    } else if (message.text) {
+                        try {
+                            const plaintext = decryptText(currentChat.private_key, message.text);
+                            addMessage({ ...message, text: plaintext });
+                        } catch (e) {
+                            console.error('Text decrypt error', e);
+                        }
                     }
-                    else {
-                        addMessage(message);
-                    }
-                });
+                }
             });
 
             // Initialize WebSocket
-            // const token = localStorage.getItem("access_token");  // Or wherever your token is stored
             socketRef.current = new WebSocket(`ws://127.0.0.1:8000/ws/chat/${currentChat.chat_id}/?token=${accessToken}`);
 
-
-
-
-            socketRef.current.onmessage = (event) => {
-
+            socketRef.current.onmessage = async (event) => {
                 const data = JSON.parse(event.data);
 
                 if (data.type === "message") {
-                    console.log("message listener: ", data);
-                    addMessage(data);
+                    try {
+                        const plaintext = decryptText(currentChat.private_key, data.text);
+                        addMessage({ id: data.id, text: plaintext, sender: data.sender });
+                    } catch (e) {
+                        console.error('WS text decrypt error', e);
+                    }
                 } else if (data.type === "typing") {
                     if (data.sender !== currentChat.current_user) {
                         setOtherUserTyping(data.is_typing ? `${data.sender} is typing...` : "");
                     }
                 }
                 else if (data.type === "voice_message") {
-                    console.log("voice listener: ", data);
-                    const audioBlob = new Blob([new Uint8Array(atob(data.audio).split("").map(char => char.charCodeAt(0)))], { type: 'audio/mp3' });
-
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    const message = {
-                        id: data.id,
-                        voice_url: audioUrl,
-                        sender: data.sender,
-                        text: "",
+                    try {
+                        const u8 = decryptAudio(currentChat.private_key, data.encrypted_audio, data.encrypted_aes_key, data.iv);
+                        const blob = new Blob([u8], { type: 'audio/webm' });
+                        const audioUrl = URL.createObjectURL(blob);
+                        addMessage({ id: data.id, voice_url: audioUrl, sender: data.sender, text: "" });
+                    } catch (e) {
+                        console.error('WS voice decrypt error', e);
                     }
-                    addMessage(message);
-
-
-
-                    // addMessage(data);
                 }
                 else if (data.type === "delete") {
-                    console.log("delete listener: ", data);
                     deleteMessage(data.id);
                     if (data.sender === currentChat.current_user_id) {
                         toast.success("Message deleted successfully");
@@ -173,33 +168,46 @@ const ChatWindow = () => {
     };
 
     const [showMenu, setShowMenu] = useState(false);  // To handle which message's menu is shown
+    const audioRef = useRef(null);
 
     const toggleMenu = (index) => {
         // Toggle visibility of the dropdown menu
         setShowMenu(showMenu === index ? null : index);
     };
 
-
+    const speakText = async (text) => {
+        try {
+            const res = await axiosInstance.post('/chat/tts/', { text });
+            const { audio, mime } = res.data;
+            const byteArray = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+            const blob = new Blob([byteArray], { type: mime || 'audio/mpeg' });
+            const url = URL.createObjectURL(blob);
+            const el = new Audio(url);
+            el.play();
+        } catch (e) {
+            console.error('TTS error', e);
+            toast.error('Failed to generate voice');
+        }
+    };
 
 
     const sendVoiceMessage = () => {
-
-
+        if (!audioBlob?.blob) return;
         const reader = new FileReader();
-        reader.readAsDataURL(audioBlob.blob);
-
+        reader.readAsArrayBuffer(audioBlob.blob);
         reader.onloadend = () => {
-            const base64Audio = reader.result.split(",")[1]; // Extract base64 content
-
-            // Send the audio in base64 format through WebSocket
-            socketRef.current.send(JSON.stringify({ type: "voice", voice: base64Audio, sender: currentChat.current_user_id, recipient: currentChat.participants[1] }));
+            const bytes = new Uint8Array(reader.result);
+            const enc = encryptAudio(currentChat.public_key, bytes);
+            socketRef.current.send(JSON.stringify({
+                type: "voice",
+                encrypted_audio: enc.encrypted_audio,
+                encrypted_aes_key: enc.encrypted_aes_key,
+                iv: enc.iv,
+                sender: currentChat.current_user_id,
+                recipient: currentChat.participants[1]
+            }));
         };
-
-
-
-        // setAudioBlob(null);
         setIsModalOpen(false);
-
     };
 
 
@@ -222,9 +230,8 @@ const ChatWindow = () => {
     const sendMessage = () => {
 
         if (socketRef.current && newMessage.trim()) {
-
-            const messageData = { type: "message", message: newMessage, voice_message: null, recipient: currentChat.participants[1] };
-            // console.log(messageData);
+            const ciphertext = encryptText(currentChat.public_key, newMessage);
+            const messageData = { type: "message", message: ciphertext, voice_message: null, recipient: currentChat.participants[1] };
             socketRef.current.send(JSON.stringify(messageData));
             setNewMessage("");
 
@@ -424,7 +431,7 @@ const ChatWindow = () => {
                                                 >
 
                                                     <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
-                                                        <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
+                                                        <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
                                                     </svg>
 
                                                     {showMenu === index && (
@@ -438,12 +445,50 @@ const ChatWindow = () => {
                                                                 Delete
                                                             </button>
                                                             <button
-                                                                onClick={() => handleTranscribe(msg.id, msg.voice_url)}
+                                                                onClick={() => speakText(msg.text)}
+                                                                className="text-blue-500 ml-3"
+                                                            >
+                                                                Voice
+                                                            </button>
+                                                            <div className="flex gap-2 mt-2">
+                                                                {reactionIcons.map((icon) => (
+                                                                    <button key={icon} className="text-xl">
+                                                                        {icon}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                </div>
+                                            )
+                                        }
+                                        {
+                                            msg.sender !== currentChat.current_user_id && (
+                                                <div
+                                                    className="flex items-center relative"
+                                                >
+                                                    <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
+                                                        <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
+                                                    </svg>
+
+                                                    {showMenu === index && (
+                                                        <div
+                                                            className="absolute bg-white shadow-md rounded-lg p-2 mt-2 top-5 z-50"
+                                                        >
+                                                            <button
+                                                                onClick={() => speakText(msg.text)}
                                                                 className="text-blue-500"
                                                             >
-                                                                {isTranscribing[msg.id] ? 'Transcribing...' :
-                                                                    transcription[msg.id] ? 'Show Transcription' : 'Transcribe'}
+                                                                Voice
                                                             </button>
+                                                            <div className="flex gap-2">
+                                                                {reactionIcons.map((icon) => (
+                                                                    <button key={icon} className="text-xl">
+                                                                        {icon}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                     )}
 
@@ -490,7 +535,7 @@ const ChatWindow = () => {
                                                             className="flex items-center relative gap-2 flex-shrink-0"
                                                         >
                                                             <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
-                                                                <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
+                                                                <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
                                                             </svg>
 
                                                             {showMenu === index && (
@@ -503,13 +548,46 @@ const ChatWindow = () => {
                                                                     >
                                                                         Delete
                                                                     </button>
+                                                                   <div className="flex gap-2 mt-2">
+                                                                       {reactionIcons.map((icon) => (
+                                                                           <button key={icon} className="text-xl">
+                                                                               {icon}
+                                                                           </button>
+                                                                       ))}
+                                                                   </div>
                                                                 </div>
                                                             )}
 
                                                         </div>
                                                     )
                                                 }
-                                            </div>
+                                                {
+                                                    msg.sender !== currentChat.current_user_id && (
+                                                        <div
+                                                            className="flex items-center relative gap-2 flex-shrink-0"
+                                                        >
+                                                            <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
+                                                                <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
+                                                            </svg>
+
+                                                            {showMenu === index && (
+                                                                <div
+                                                                    className="absolute bg-white shadow-md rounded-lg p-2 mt-2 top-5 z-50"
+                                                                >
+                                                                    <div className="flex gap-2">
+                                                                        {reactionIcons.map((icon) => (
+                                                                            <button key={icon} className="text-xl">
+                                                                                {icon}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                        </div>
+                                                    )
+                                                }
+                                             </div>
 
                                             <audio
                                                 controls
