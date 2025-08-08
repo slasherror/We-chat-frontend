@@ -424,103 +424,88 @@ const ChatWindow = () => {
                             if (msg.text) {
 
 
-                                return ((
-                                    <div key={index} className={`flex items-center peer gap-x-2 ${msg.sender === currentChat.current_user_id && 'ms-auto'} `}>
-                                        {
-                                            msg.sender === currentChat.current_user_id && (
-                                                <div
-                                                    className="flex items-center relative"
-                                                >
-
+                                return (
+                                    <div key={index} className={`flex flex-col ${msg.sender === currentChat.current_user_id ? 'items-end' : 'items-start'} mb-2`}>
+                                        <div className={`flex items-center gap-x-2 relative ${msg.sender === currentChat.current_user_id ? '' : 'flex-row-reverse'}`}>
+                                            {/* For left-side messages, : icon on left; for right-side, on right */}
+                                            {msg.sender === currentChat.current_user_id ? (
+                                                <>
+                                                    <div
+                                                        className={`p-2 w-fit max-w-[550px] bg-purple-700 text-white ms-auto rounded-l-xl rounded-tr-xl cursor-pointer`}
+                                                    >
+                                                        <p>{msg.text} </p>
+                                                    </div>
                                                     <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
                                                         <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
                                                     </svg>
-
-                                                    {showMenu === index && (
-                                                        <div
-                                                            className="absolute bg-white shadow-md rounded-lg p-2 mt-2 top-5 z-50"
-                                                        >
-                                                            <button
-                                                                onClick={() => handleDeleteMessage(msg.id)}
-                                                                className="text-red-500"
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                            <button
-                                                                onClick={() => speakText(msg.text)}
-                                                                className="text-blue-500 ml-3"
-                                                            >
-                                                                Voice
-                                                            </button>
-                                                            <div className="flex gap-2 mt-2">
-                                                                {reactionIcons.map((icon) => (
-                                                                    <button key={icon} className="text-xl">
-                                                                        {icon}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                </div>
-                                            )
-                                        }
-                                        {
-                                            msg.sender !== currentChat.current_user_id && (
-                                                <div
-                                                    className="flex items-center relative"
-                                                >
+                                                </>
+                                            ) : (
+                                                <>
                                                     <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
                                                         <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
                                                     </svg>
-
-                                                    {showMenu === index && (
-                                                        <div
-                                                            className="absolute bg-white shadow-md rounded-lg p-2 mt-2 top-5 z-50"
-                                                        >
-                                                            <button
-                                                                onClick={() => speakText(msg.text)}
-                                                                className="text-blue-500"
-                                                            >
-                                                                Voice
-                                                            </button>
-                                                            <div className="flex gap-2">
-                                                                {reactionIcons.map((icon) => (
-                                                                    <button key={icon} className="text-xl">
-                                                                        {icon}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                </div>
-                                            )
-                                        }
-                                        <div
-
-
-
-                                            className={`p-2 w-fit max-w-[550px] ${msg.sender === currentChat.current_user_id ? "bg-purple-700 text-white ms-auto rounded-l-xl rounded-tr-xl" : "bg-blue-500 text-white rounded-r-xl rounded-tl-xl"
-                                                } mb-2 cursor-pointer`}
-                                        >
-                                            <p>{msg.text} </p>
+                                                    <div
+                                                        className={`p-2 w-fit max-w-[550px] bg-blue-500 text-white rounded-r-xl rounded-tl-xl cursor-pointer`}
+                                                    >
+                                                        <p>{msg.text} </p>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
-
-
+                                        {/* Dropdown menu below text message, creates space and does not overlap */}
+                                        {showMenu === index && (
+                                            msg.sender === currentChat.current_user_id ? (
+                                                <div className="w-full flex justify-end">
+                                                    <div className="bg-white shadow-md rounded-lg p-2 mt-2 w-fit">
+                                                        <button
+                                                            onClick={() => handleDeleteMessage(msg.id)}
+                                                            className="text-red-500"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                        <button
+                                                            onClick={() => speakText(msg.text)}
+                                                            className="text-blue-500 ml-3"
+                                                        >
+                                                            Voice
+                                                        </button>
+                                                        <div className="flex gap-2 mt-2">
+                                                            {reactionIcons.map((icon) => (
+                                                                <button key={icon} className="text-xl">
+                                                                    {icon}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="w-full flex">
+                                                    <div className="bg-white shadow-md rounded-lg p-2 mt-2 w-fit">
+                                                        <button
+                                                            onClick={() => speakText(msg.text)}
+                                                            className="text-blue-500"
+                                                        >
+                                                            Voice
+                                                        </button>
+                                                        <div className="flex gap-2">
+                                                            {reactionIcons.map((icon) => (
+                                                                <button key={icon} className="text-xl">
+                                                                    {icon}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        )}
                                     </div>
-                                ))
+                                );
 
                             }
                             else if (msg.voice_url) {
                                 return (
                                     <div key={index} className={`flex flex-col peer gap-x-2 ${msg.sender === currentChat.current_user_id && 'ms-auto'} `}>
-
-                                        <div
-
-                                            className={`w-fit max-w-[550px] flex items-center ${msg.sender === currentChat.current_user_id ? " text-white ms-auto rounded-l-lg rounded-tr-lg" : " text-white rounded-r-lg rounded-tl-lg"
-                                                } mb-2`}
-                                        >
+                                        <div className={`w-fit max-w-[550px] flex items-center ${msg.sender === currentChat.current_user_id ? " text-white ms-auto rounded-l-lg rounded-tr-lg" : " text-white rounded-r-lg rounded-tl-lg"} mb-2`}>
                                             <div className={`flex items-center peer gap-x-2 ${msg.sender === currentChat.current_user_id && 'ms-auto'} `}>
                                                 {/* Transcription Icon - Available for all voice messages */}
                                                 <img src={transcriptionIcon}
@@ -530,77 +515,60 @@ const ChatWindow = () => {
                                                     className="hover:scale-110 transition-transform w-4 h-4 cursor-pointer"
                                                     title={isTranscribing[msg.id] ? 'Transcribing...' : transcription[msg.id] ? 'Hide Transcription' : 'Show Transcription'}
                                                     alt="transcription" />
-
-                                                {
-                                                    msg.sender === currentChat.current_user_id && (
-                                                        <div
-                                                            className="flex items-center relative gap-2 flex-shrink-0"
-                                                        >
-                                                            <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
-                                                                <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
-                                                            </svg>
-
-                                                            {showMenu === index && (
-                                                                <div
-                                                                    className="absolute bg-white shadow-md rounded-lg p-2 mt-2 top-5 z-50"
-                                                                >
-                                                                    <button
-                                                                        onClick={() => handleDeleteMessage(msg.id)}
-                                                                        className="text-red-500"
-                                                                    >
-                                                                        Delete
-                                                                    </button>
-                                                                   <div className="flex gap-2 mt-2">
-                                                                       {reactionIcons.map((icon) => (
-                                                                           <button key={icon} className="text-xl">
-                                                                               {icon}
-                                                                           </button>
-                                                                       ))}
-                                                                   </div>
-                                                                </div>
-                                                            )}
-
-                                                        </div>
-                                                    )
-                                                }
-                                                {
-                                                    msg.sender !== currentChat.current_user_id && (
-                                                        <div
-                                                            className="flex items-center relative gap-2 flex-shrink-0"
-                                                        >
-                                                            <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
-                                                                <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
-                                                            </svg>
-
-                                                            {showMenu === index && (
-                                                                <div
-                                                                    className="absolute bg-white shadow-md rounded-lg p-2 mt-2 top-5 z-50"
-                                                                >
-                                                                    <div className="flex gap-2">
-                                                                        {reactionIcons.map((icon) => (
-                                                                            <button key={icon} className="text-xl">
-                                                                                {icon}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                        </div>
-                                                    )
-                                                }
-                                             </div>
-
-                                            <audio
-                                                controls
-
-                                            >
+                                                {msg.sender === currentChat.current_user_id && (
+                                                    <div className="flex items-center">
+                                                        <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
+                                                            <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                {msg.sender !== currentChat.current_user_id && (
+                                                    <div className="flex items-center">
+                                                        <svg onClick={() => toggleMenu(index)} width="16px" height="16px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#000000" className="bi bi-three-dots-vertical cursor-pointer">
+                                                            <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <audio controls>
                                                 <source src={msg.voice_url} type="audio/webm" />
                                                 Your browser does not support the audio element.
                                             </audio>
-
                                         </div>
-
+                                        {/* Dropdown menu below audio message, creates space and does not overlap */}
+                                        {showMenu === index && (
+                                            <div className="w-full flex">
+                                                <div className="bg-white shadow-md rounded-lg p-2 mt-2 w-fit">
+                                                    {msg.sender === currentChat.current_user_id ? (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleDeleteMessage(msg.id)}
+                                                                className="text-red-500"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                            <div className="flex gap-2 mt-2">
+                                                                {reactionIcons.map((icon) => (
+                                                                    <button key={icon} className="text-xl">
+                                                                        {icon}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="flex gap-2">
+                                                                {reactionIcons.map((icon) => (
+                                                                    <button key={icon} className="text-xl">
+                                                                        {icon}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                         {/* Show transcription if available */}
                                         {transcription[msg.id] && (
                                             <div style={transcriptionStyles} className={`w-fit ${msg.sender === currentChat.current_user_id ? "ms-auto" : ""}`}>
